@@ -149,7 +149,7 @@ using std::min;
 using std::vector;
 
 DEFINE_double(corridor_length,
-              30.0,
+              3.0,
               "Length of the corridor that the robot is travelling down.");
 
 DEFINE_double(pose_separation,
@@ -169,14 +169,15 @@ DEFINE_double(range_stddev,
 static constexpr int kStride = 10;
 
 struct OdometryConstraint {
-  typedef AutoDiffCostFunction<OdometryConstraint, 1, 1> OdometryCostFunction;
+  typedef AutoDiffCostFunction<OdometryConstraint, 1, 1, 1> OdometryCostFunction;
 
   OdometryConstraint(double odometry_mean, double odometry_stddev)
       : odometry_mean(odometry_mean), odometry_stddev(odometry_stddev) {}
 
   template <typename T>
-  bool operator()(const T* const odometry, T* residual) const {
-    *residual = (*odometry - odometry_mean) / odometry_stddev;
+  bool operator()(const T* const prev_pose, const T* const curr_pose, T* residual) const {
+    const T est_odometry = curr_pose[0] - prev_pose[0];
+    *residual = (est_odometry - odometry_mean) / odometry_stddev;
     return true;
   }
 
@@ -190,49 +191,31 @@ struct OdometryConstraint {
 };
 
 struct RangeConstraint {
-  typedef DynamicAutoDiffCostFunction<RangeConstraint, kStride>
-      RangeCostFunction;
+  typedef AutoDiffCostFunction<RangeConstraint, 1, 1> RangeCostFunction;
 
-  RangeConstraint(int pose_index,
-                  double range_reading,
+  RangeConstraint(double range_reading,
                   double range_stddev,
                   double corridor_length)
-      : pose_index(pose_index),
-        range_reading(range_reading),
+      : range_reading(range_reading),
         range_stddev(range_stddev),
         corridor_length(corridor_length) {}
 
   template <typename T>
-  bool operator()(T const* const* relative_poses, T* residuals) const {
-    T global_pose(0);
-    for (int i = 0; i <= pose_index; ++i) {
-      global_pose += relative_poses[i][0];
-    }
+  bool operator()(const T* const global_pose, T* residuals) const {
     residuals[0] =
-        (global_pose + range_reading - corridor_length) / range_stddev;
+        (global_pose[0] + range_reading - corridor_length) / range_stddev;
     return true;
   }
 
   // Factory method to create a CostFunction from a RangeConstraint to
   // conveniently add to a ceres problem.
-  static RangeCostFunction* Create(const int pose_index,
-                                   const double range_reading,
-                                   vector<double>* odometry_values,
-                                   vector<double*>* parameter_blocks) {
+  static RangeCostFunction* Create(const double range_reading) {
     RangeConstraint* constraint = new RangeConstraint(
-        pose_index, range_reading, FLAGS_range_stddev, FLAGS_corridor_length);
+        range_reading, FLAGS_range_stddev, FLAGS_corridor_length);
     RangeCostFunction* cost_function = new RangeCostFunction(constraint);
-    // Add all the parameter blocks that affect this constraint.
-    parameter_blocks->clear();
-    for (int i = 0; i <= pose_index; ++i) {
-      parameter_blocks->push_back(&((*odometry_values)[i]));
-      cost_function->AddParameterBlock(1);
-    }
-    cost_function->SetNumResiduals(1);
     return (cost_function);
   }
 
-  const int pose_index;
   const double range_reading;
   const double range_stddev;
   const double corridor_length;
@@ -261,27 +244,123 @@ void SimulateRobot(vector<double>* odometry_values,
   }
 }
 
-void PrintState(const vector<double>& odometry_readings,
-                const vector<double>& range_readings) {
+void PrintState(const vector<double>& pose_values, 
+                const vector<double>& odometry_readings,
+                const vector<double>& range_readings,
+                int idx = -1) {
+  CHECK_EQ(pose_values.size(), odometry_readings.size() + 1);
   CHECK_EQ(odometry_readings.size(), range_readings.size());
-  double robot_location = 0.0;
+
   printf("pose: location     odom    range  r.error  o.error\n");
-  for (int i = 0; i < odometry_readings.size(); ++i) {
-    robot_location += odometry_readings[i];
-    const double range_error =
-        robot_location + range_readings[i] - FLAGS_corridor_length;
-    const double odometry_error = FLAGS_pose_separation - odometry_readings[i];
-    printf("%4d: %8.3f %8.3f %8.3f %8.3f %8.3f\n",
-           static_cast<int>(i),
-           robot_location,
-           odometry_readings[i],
-           range_readings[i],
-           range_error,
-           odometry_error);
+  int max_idx = idx >= 0 ? idx : pose_values.size();
+  for (int i = 0; i < max_idx; ++i) {
+    double robot_location = pose_values[i];
+
+    if (i == 0) {
+      printf("%4d: %8.3f %8.3f %8.3f %8.3f %8.3f\n",
+             static_cast<int>(i),
+             robot_location,
+             0.0,
+             0.0,
+             0.0,
+             0.0);
+    }
+    else {
+      const double range_error =
+          robot_location + range_readings[i-1] - FLAGS_corridor_length;
+      const double odometry_error = FLAGS_pose_separation - (pose_values[i] - pose_values[i-1]);
+      printf("%4d: %8.3f %8.3f %8.3f %8.3f %8.3f\n",
+             static_cast<int>(i),
+             robot_location,
+             odometry_readings[i],
+             range_readings[i],
+             range_error,
+             odometry_error);
+    }
   }
 }
 
 }  // namespace
+
+vector<double> run(bool remove_poses) {
+  vector<double> odometry_values;
+  vector<double> range_readings;
+  SimulateRobot(&odometry_values, &range_readings);
+
+  // Initialize pose values
+  vector<double> pose_values(odometry_values.size() + 1);
+  std::partial_sum(odometry_values.begin(), odometry_values.end(), pose_values.begin() + 1);
+
+  //printf("Initial values:\n");
+  //PrintState(pose_values, odometry_values, range_readings);
+  ceres::Problem::Options problem_options;
+  problem_options.enable_fast_removal = true;
+  ceres::Problem problem(problem_options);
+
+  problem.AddParameterBlock(&(pose_values[0]), 1);
+  problem.SetParameterBlockConstant(&(pose_values[0]));
+
+  for (int i = 0; i < odometry_values.size(); ++i) {
+    // Create and add a DynamicAutoDiffCostFunction for the RangeConstraint from
+    // pose i.
+    RangeConstraint::RangeCostFunction* range_cost_function =
+        RangeConstraint::Create(range_readings[i]);
+    problem.AddResidualBlock(range_cost_function, NULL, &(pose_values[i+1]));
+
+    // Create and add an AutoDiffCostFunction for the OdometryConstraint for
+    // pose i.
+    problem.AddResidualBlock(OdometryConstraint::Create(odometry_values[i]),
+                             NULL,
+                             &(pose_values[i]),
+                             &(pose_values[i+1]));
+
+    ceres::Solver::Options solver_options;
+    solver_options.minimizer_progress_to_stdout = false;
+    solver_options.trust_region_strategy_type = ceres::DOGLEG;
+    solver_options.linear_solver_type = ceres::DENSE_SCHUR;
+
+    Solver::Summary summary;
+    //printf("Solving...\n");
+    Solve(solver_options, &problem, &summary);
+    //printf("Done.\n");
+    //std::cout << summary.FullReport() << "\n";
+    //printf("Final values:\n");
+    //PrintState(pose_values, odometry_values, range_readings, i);
+
+    if (i % 3 == 1) {
+      printf("Remove pose i: %d\n", i);
+
+      // Add two odometry meas together, add the new measurement.
+      double combined_odometry = odometry_values[i - 1] + odometry_values[i];
+      problem.AddResidualBlock(OdometryConstraint::Create(combined_odometry),
+                               NULL,
+                               &(pose_values[i-1]),
+                               &(pose_values[i+1]));
+      problem.RemoveParameterBlock(&(pose_values[i]));
+
+      Solver::Summary summary;
+      //printf("Solving...\n");
+      Solve(solver_options, &problem, &summary);
+      //printf("Done.\n");
+      //std::cout << summary.FullReport() << "\n";
+      //printf("Final values:\n");
+      //PrintState(pose_values, odometry_values, range_readings, i);
+    }
+
+    std::vector<ceres::ResidualBlockId> residual_blocks;
+    problem.GetResidualBlocks(&residual_blocks);
+    std::cout << "costs: ";
+    for (auto& res_block : residual_blocks) {
+      double cost;
+      static constexpr bool apply_loss_function = true;
+      problem.EvaluateResidualBlock(res_block, apply_loss_function, &cost, nullptr, nullptr);
+      std::cout << cost << ", ";
+    }
+    std::cout << std::endl;
+  }
+
+  return pose_values;
+}
 
 int main(int argc, char** argv) {
   google::InitGoogleLogging(argv[0]);
@@ -292,39 +371,36 @@ int main(int argc, char** argv) {
   CHECK_GT(FLAGS_odometry_stddev, 0.0);
   CHECK_GT(FLAGS_range_stddev, 0.0);
 
-  vector<double> odometry_values;
-  vector<double> range_readings;
-  SimulateRobot(&odometry_values, &range_readings);
+  size_t seed = 1234567;
+  bool remove_poses = true;
+  srand(seed);
+  vector<double> pose_values1 = run(remove_poses);
 
-  printf("Initial values:\n");
-  PrintState(odometry_values, range_readings);
-  ceres::Problem problem;
+  srand(seed);
+  vector<double> pose_values2 = run(remove_poses);
 
-  for (int i = 0; i < odometry_values.size(); ++i) {
-    // Create and add a DynamicAutoDiffCostFunction for the RangeConstraint from
-    // pose i.
-    vector<double*> parameter_blocks;
-    RangeConstraint::RangeCostFunction* range_cost_function =
-        RangeConstraint::Create(
-            i, range_readings[i], &odometry_values, &parameter_blocks);
-    problem.AddResidualBlock(range_cost_function, NULL, parameter_blocks);
+  CHECK_EQ(pose_values1.size(), pose_values2.size());
 
-    // Create and add an AutoDiffCostFunction for the OdometryConstraint for
-    // pose i.
-    problem.AddResidualBlock(OdometryConstraint::Create(odometry_values[i]),
-                             NULL,
-                             &(odometry_values[i]));
+  printf("pose:     est1     est2   eq\n");
+  for (int i = 0; i < pose_values1.size(); i++) {
+      printf("%4d: %8.3f %8.3f %4d\n",
+             static_cast<int>(i),
+             pose_values1[i],
+             pose_values2[i],
+             pose_values1[i] == pose_values2[i]);
   }
 
-  ceres::Solver::Options solver_options;
-  solver_options.minimizer_progress_to_stdout = true;
 
-  Solver::Summary summary;
-  printf("Solving...\n");
-  Solve(solver_options, &problem, &summary);
-  printf("Done.\n");
-  std::cout << summary.FullReport() << "\n";
-  printf("Final values:\n");
-  PrintState(odometry_values, range_readings);
+
+  //ceres::Solver::Options solver_options;
+  //solver_options.minimizer_progress_to_stdout = true;
+
+  //Solver::Summary summary;
+  //printf("Solving...\n");
+  //Solve(solver_options, &problem, &summary);
+  //printf("Done.\n");
+  //std::cout << summary.FullReport() << "\n";
+  //printf("Final values:\n");
+  //PrintState(odometry_values, range_readings);
   return 0;
 }
