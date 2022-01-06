@@ -37,6 +37,7 @@
 #include <limits>
 #include <memory>
 #include <string>
+#include <vector>
 #include <unordered_set>
 
 #include "ceres/array_utils.h"
@@ -45,6 +46,98 @@
 #include "ceres/local_parameterization.h"
 #include "ceres/stringprintf.h"
 #include "glog/logging.h"
+
+template <typename T>
+class InsertionOrderSet
+{
+ public:
+  using iterator = typename std::vector<T>::iterator;
+  using const_iterator = typename std::vector<T>::const_iterator;
+
+  InsertionOrderSet() = default;
+
+  InsertionOrderSet(std::initializer_list<T> l)
+  {
+    for (const T& element : l)
+      insert(element);
+  }
+
+  std::size_t size() const
+  {
+    return vec_.size();
+  }
+
+  bool empty() const
+  {
+    return vec_.empty();
+  }
+
+  void insert(const T& element)
+  {
+    if (!unique_vals_.count(element))
+    {
+      vec_.push_back(element);
+      unique_vals_.insert(element);
+    }
+  }
+
+  template <class InputIt>
+  void insert(InputIt first, InputIt last)
+  {
+    for (InputIt it = first; it < last; it++)
+      insert(*it);
+  }
+
+  bool operator==(const InsertionOrderSet<T>& other) const
+  {
+    return vec_ == other.vec_;
+  }
+
+  void erase(const T& element)
+  {
+    if (unique_vals_.count(element))
+    {
+      iterator it = std::find(vec_.begin(), vec_.end(), element);
+      vec_.erase(it);
+      unique_vals_.erase(element);
+    }
+  }
+
+  iterator begin()
+  {
+    return vec_.begin();
+  }
+
+  const_iterator begin() const
+  {
+    return vec_.begin();
+  }
+
+  iterator end()
+  {
+    return vec_.end();
+  }
+
+  const_iterator end() const
+  {
+    return vec_.end();
+  }
+
+  iterator find(const T& val)
+  {
+    return std::find(vec_.begin(), vec_.end(), val);
+  }
+
+  const_iterator find(const T& val) const
+  {
+    return std::find(vec_.begin(), vec_.end(), val);
+  }
+
+ protected:
+  std::vector<T> vec_;
+  std::unordered_set<T> unique_vals_;
+};
+
 
 namespace ceres {
 namespace internal {
@@ -63,7 +156,7 @@ class ResidualBlock;
 // responsible for the proper disposal of the local parameterization.
 class ParameterBlock {
  public:
-  typedef std::unordered_set<ResidualBlock*> ResidualBlockSet;
+  typedef InsertionOrderSet<ResidualBlock*> ResidualBlockSet;
 
   // Create a parameter block with the user state, size, and index specified.
   // The size is the size of the parameter block and the index is the position
