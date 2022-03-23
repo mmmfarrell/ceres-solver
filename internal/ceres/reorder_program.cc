@@ -37,6 +37,7 @@
 
 #include "Eigen/SparseCore"
 #include "ceres/cxsparse.h"
+#include "ceres/insertion_order_set.h"
 #include "ceres/internal/port.h"
 #include "ceres/ordered_groups.h"
 #include "ceres/parameter_block.h"
@@ -225,9 +226,9 @@ bool ApplyOrdering(const ProblemImpl::ParameterMap& parameter_map,
       program->mutable_parameter_blocks();
   parameter_blocks->clear();
 
-  const map<int, set<double*>>& groups = ordering.group_to_elements();
+  const map<int, InsertionOrderSet<double*>>& groups = ordering.group_to_elements();
   for (const auto& p : groups) {
-    const set<double*>& group = p.second;
+    const InsertionOrderSet<double*>& group = p.second;
     for (double* parameter_block_ptr : group) {
       auto it = parameter_map.find(parameter_block_ptr);
       if (it == parameter_map.end()) {
@@ -469,7 +470,7 @@ bool ReorderProgramForSchurTypeLinearSolver(
     // group.
 
     // Verify that the first elimination group is an independent set.
-    const set<double*>& first_elimination_group =
+    const InsertionOrderSet<double*>& first_elimination_group =
         parameter_block_ordering->group_to_elements().begin()->second;
     if (!program->IsParameterBlockSetIndependent(first_elimination_group)) {
       *error = StringPrintf(

@@ -37,6 +37,7 @@
 #include <vector>
 
 #include "ceres/evaluation_callback.h"
+#include "ceres/insertion_order_set.h"
 #include "ceres/internal/port.h"
 
 namespace ceres {
@@ -125,7 +126,7 @@ class CERES_EXPORT_INTERNAL Program {
   // parameter_blocks as that would violate the assumption that it
   // is an independent set in the Hessian matrix.
   bool IsParameterBlockSetIndependent(
-      const std::set<double*>& independent_set) const;
+      const InsertionOrderSet<double*>& independent_set) const;
 
   // Create a TripletSparseMatrix which contains the zero-one
   // structure corresponding to the block sparsity of the transpose of

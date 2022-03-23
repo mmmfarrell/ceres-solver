@@ -36,6 +36,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "ceres/insertion_order_set.h"
 #include "ceres/internal/port.h"
 #include "glog/logging.h"
 
@@ -128,7 +129,7 @@ class OrderedGroups {
     }
 
     auto it = group_to_elements_.rbegin();
-    std::map<int, std::set<T>> new_group_to_elements;
+    std::map<int, InsertionOrderSet<T>> new_group_to_elements;
     new_group_to_elements[it->first] = it->second;
 
     int new_group_id = it->first + 1;
@@ -178,14 +179,14 @@ class OrderedGroups {
     return group_to_elements_.begin()->first;
   }
 
-  const std::map<int, std::set<T>>& group_to_elements() const {
+  const std::map<int, InsertionOrderSet<T>>& group_to_elements() const {
     return group_to_elements_;
   }
 
   const std::map<T, int>& element_to_group() const { return element_to_group_; }
 
  private:
-  std::map<int, std::set<T>> group_to_elements_;
+  std::map<int, InsertionOrderSet<T>> group_to_elements_;
   std::unordered_map<T, int> element_to_group_;
 };
 
