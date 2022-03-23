@@ -58,13 +58,8 @@ http_archive(
 # External dependency: Eigen; has no Bazel build.
 http_archive(
     name = "com_gitlab_libeigen_eigen",
-    sha256 = "0215c6593c4ee9f1f7f28238c4e8995584ebf3b556e9dbf933d84feb98d5b9ef",
-    strip_prefix = "eigen-3.3.8",
-    urls = [
-        "https://gitlab.com/libeigen/eigen/-/archive/3.3.8/eigen-3.3.8.tar.bz2",
-    ],
     build_file_content =
-"""
+        """
 # TODO(keir): Replace this with a better version, like from TensorFlow.
 # See https://github.com/ceres-solver/ceres-solver/issues/337.
 cc_library(
@@ -74,17 +69,19 @@ cc_library(
     hdrs = glob(['Eigen/**']),
     visibility = ['//visibility:public'],
 )
-"""
+""",
+    sha256 = "0215c6593c4ee9f1f7f28238c4e8995584ebf3b556e9dbf933d84feb98d5b9ef",
+    strip_prefix = "eigen-3.3.8",
+    urls = [
+        "https://gitlab.com/libeigen/eigen/-/archive/3.3.8/eigen-3.3.8.tar.bz2",
+    ],
 )
 
 # External dependency: Google Benchmark; has no Bazel build.
 http_archive(
     name = "com_github_google_benchmark",
-    urls = ["https://github.com/google/benchmark/archive/56f52ee228783547f544d9ac4a533574b9010e3f.zip"],
-    sha256 = "8c1c6e90cd320b07504fabb86400f390faff2e599183ebd9396908817968ae79",
-    strip_prefix = "benchmark-56f52ee228783547f544d9ac4a533574b9010e3f",
     build_file_content =
-"""
+        """
 cc_library(
     name = "benchmark",
     srcs = glob([
@@ -100,5 +97,8 @@ cc_library(
     ],
     visibility = ["//visibility:public"],
 )
-"""
+""",
+    sha256 = "8c1c6e90cd320b07504fabb86400f390faff2e599183ebd9396908817968ae79",
+    strip_prefix = "benchmark-56f52ee228783547f544d9ac4a533574b9010e3f",
+    urls = ["https://github.com/google/benchmark/archive/56f52ee228783547f544d9ac4a533574b9010e3f.zip"],
 )

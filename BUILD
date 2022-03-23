@@ -31,7 +31,7 @@
 # These are Bazel rules to build Ceres. It's currently in Alpha state, and does
 # not support parameterization around threading choice or sparse backends.
 
-load("//:bazel/ceres.bzl", "ceres_library")
+load("@ai_shield_open_frontier//ceres:ceres.bzl", "ceres_library")
 
 ceres_library(
     name = "ceres",
@@ -170,8 +170,8 @@ TEST_COPTS = [
 TEST_DEPS = [
     "//:ceres",
     "//:test_util",
-    "@com_gitlab_libeigen_eigen//:eigen",
-    "@com_github_gflags_gflags//:gflags",
+    "@com_bitbucket_eigen3//:eigen",
+    "@com_google_gflags//:gflags",
 ]
 
 # Instantiate all the tests with a template.
@@ -207,7 +207,7 @@ TEST_DEPS = [
     name = benchmark_name,
     srcs = ["internal/ceres/" + benchmark_name + ".cc"],
     copts = TEST_COPTS,
-    deps = TEST_DEPS + ["@com_github_google_benchmark//:benchmark"],
+    deps = TEST_DEPS + ["@com_google_benchmark//:benchmark"],
 ) for benchmark_name in [
     "small_blas_gemm_benchmark",
     "small_blas_gemv_benchmark",
