@@ -40,6 +40,7 @@
 #include "ceres/compressed_row_sparse_matrix.h"
 #include "ceres/cost_function.h"
 #include "ceres/evaluator.h"
+#include "ceres/insertion_order_set.h"
 #include "ceres/internal/port.h"
 #include "ceres/local_parameterization.h"
 #include "ceres/loss_function.h"
@@ -412,7 +413,7 @@ bool Program::RemoveFixedBlocks(vector<double*>* removed_parameter_blocks,
 }
 
 bool Program::IsParameterBlockSetIndependent(
-    const set<double*>& independent_set) const {
+    const InsertionOrderSet<double*>& independent_set) const {
   // Loop over each residual block and ensure that no two parameter
   // blocks in the same residual block are part of
   // parameter_block_ptrs as that would violate the assumption that it

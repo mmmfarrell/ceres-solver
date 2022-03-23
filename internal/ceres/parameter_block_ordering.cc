@@ -35,6 +35,7 @@
 
 #include "ceres/graph.h"
 #include "ceres/graph_algorithms.h"
+#include "ceres/insertion_order_set.h"
 #include "ceres/map_util.h"
 #include "ceres/parameter_block.h"
 #include "ceres/program.h"
@@ -167,7 +168,7 @@ void OrderingToGroupSizes(const ParameterBlockOrdering* ordering,
     return;
   }
 
-  const map<int, set<double*>>& group_to_elements =
+  const map<int, InsertionOrderSet<double*>>& group_to_elements =
       ordering->group_to_elements();
   for (const auto& g_t_e : group_to_elements) {
     group_sizes->push_back(g_t_e.second.size());
